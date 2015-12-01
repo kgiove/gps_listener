@@ -5,13 +5,13 @@ import javax.swing.table.AbstractTableModel;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.awt.Point;
-import java.util.Hashtable;
+import java.util.HashMap;
 
 public class WindowServer extends JFrame{
-    private int BlackBerryPort = 9999;
+    private final int BlackBerryPort = 2237;
     private Timer timer = null;
-    private JMenuBar menubar = new JMenuBar();
-    private JTabbedPane tabs = new JTabbedPane();
+    private final JMenuBar menubar = new JMenuBar();
+    private final JTabbedPane tabs = new JTabbedPane();
     public JTextArea txtMessages = new JTextArea();
     public JTextArea txtErrors = new JTextArea();
     public JTextArea txtConnections = new JTextArea();
@@ -26,23 +26,32 @@ public class WindowServer extends JFrame{
         txtErrors.setEditable(false);
         txtConnections.setEditable(false);
         
-        tabs.addTab("Trace", new JScrollPane(txtMessages));        
+        tabs.addTab("Trace", new JScrollPane(txtMessages));
+        tabs.addTab("Decoded Trace", new JScrollPane(table));
         tabs.addTab("Errors", new JScrollPane(txtErrors));
         tabs.addTab("Connections", new JScrollPane(txtConnections));        
 
         timer = new Timer();
         timer.scheduleAtFixedRate(new Task(),0,1000);
 
+        setListenerProperties();
+
+        txtConnections.append("Starting BlackBerryListener on port " + BlackBerryPort + "\n");
+        startBlackBarryListener();
+
+    }
+    
+     private void startBlackBarryListener(){
+         new BlackBerryListener(this, BlackBerryPort).start();
+    }
+    private void setListenerProperties(){
+        
         setTitle("GPS Trace Listener");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setBounds(0,0,600,450);
         setJMenuBar(menubar);
         getContentPane().add(tabs);
         setVisible(true);
-
-        txtConnections.append("Starting BlackBerryListener on port " + BlackBerryPort + "\n");
-        new BlackBerryListener(this, BlackBerryPort).start();
-
     }
 
     class FileMenu extends JMenu{
@@ -75,7 +84,7 @@ public class WindowServer extends JFrame{
 }
 
 class TableModel extends AbstractTableModel {
-  private Hashtable lookup;
+  private HashMap lookup;
   private final int rows;
   private final int columns;
   private final String headers[];
@@ -87,7 +96,7 @@ class TableModel extends AbstractTableModel {
     this.rows = rows;
     this.columns = columnHeaders.length;
     headers = columnHeaders;
-    lookup = new Hashtable();
+    lookup = new HashMap();
   }
 
   public int getColumnCount() {
@@ -98,7 +107,7 @@ class TableModel extends AbstractTableModel {
     return rows;
   }
 
-    @Override
+  @Override
   public String getColumnName(int column) {
     return headers[column];
   }
@@ -107,7 +116,7 @@ class TableModel extends AbstractTableModel {
     return lookup.get(new Point(row, column));
   }
 
-    @Override
+  @Override
   public void setValueAt(Object value, int row, int column) {
     if ((rows < 0) || (columns < 0)) {
       throw new IllegalArgumentException("Invalid row/column setting");

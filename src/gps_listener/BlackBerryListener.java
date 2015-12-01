@@ -3,14 +3,11 @@ package gps_listener;
 import java.net.*;
 import java.io.*;
 
-
+import com.microsoft.sqlserver.jdbc.SQLServerDataSource;
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.ResultSet;
-import java.util.Calendar;
-import java.util.Date;
 
 import java.util.Properties;
 
@@ -20,18 +17,16 @@ public class BlackBerryListener extends Thread{
     private Socket clientConnection = null;
     private String filePath = null;
     private Properties properties = null;
-    private Connection conn = null;
-    private Statement comm = null;
-    private Calendar date = null;
+    private Connection conn = null;   
 
     public BlackBerryListener(WindowServer windowServer, int port){
         try{
             this.windowServer = windowServer;
-            date = Calendar.getInstance();
+            
             filePath = System.getProperty("user.dir");
             properties = new Properties();
             properties.load(new FileInputStream(filePath + "\\config.properties"));
-            conn = sqlConnection();
+            conn = sqlServer2005Connection();
 
             serverListener = new ServerSocket(port);
             this.windowServer.txtConnections.append("Started BlackBerryListener on port " + port + "\n");
@@ -68,7 +63,7 @@ public class BlackBerryListener extends Thread{
             connectionMessage = clientConnection + "";
             clientIPAddress = clientConnection.getInetAddress().getHostAddress();
             windowServer.txtConnections.append(connectionMessage + " - CONNECTED\n");
-
+            
         }
 
         @Override
@@ -92,11 +87,17 @@ public class BlackBerryListener extends Thread{
 
                 dataInput.close();
                 this.clientConnection.close();
-
+                
                 windowServer.txtConnections.append(connectionMessage + " - DISCONNECTED\n");
 
-            }catch(Exception e){
-                if(e.getMessage().equals("Connection reset")){
+            }catch(IOException e){
+                if("Connection reset".equalsIgnoreCase(e.getMessage())){
+                    windowServer.txtConnections.append(connectionMessage + " - DISCONNECTED\n");
+                }else{
+                    windowServer.txtErrors.append(e.getMessage() + "\n");
+                }
+            } catch (SQLException e) {
+                if("Connection reset".equalsIgnoreCase(e.getMessage())){
                     windowServer.txtConnections.append(connectionMessage + " - DISCONNECTED\n");
                 }else{
                     windowServer.txtErrors.append(e.getMessage() + "\n");
@@ -130,64 +131,50 @@ public class BlackBerryListener extends Thread{
               String Altitude = item[3];
               String Speed = item[4];
               String Course = item[5];
-              String MobileTime = item[6];
-              String MCC = item[7];
-              String MNC = item[8];
-              String LAC = item[9];
-              String CID = item[10];
-              String GpsStatus = item[11];
+              String TrueTime = item[6];
+              String EventID = item[7];
 
+              if(item[1].trim().contains("0.0")){
+                String[] coords = getLastCoords(LocID);
+                Longitude = coords[0];
+                Latitude = coords[1];
+              }              
 
-//              if(item[1].trim().indexOf("0.0") != -1){
-//                String[] coords = getLastCoords(LocID);
-//                Longitude = coords[0];
-//                Latitude = coords[1];
-//              }
-
-              String TrueTime = DateTime();
-              String Location = "";//getAddressXY(Longitude, Latitude);
+              String Location = getAddressXY(Longitude, Latitude);
               String IPAddress = clientConnection.getInetAddress().getHostAddress();
               String IPPort = clientConnection.getPort() + "";
 
-             if(Altitude.equals("NaN")) Altitude = "0.0";
-             if(Speed.equals("NaN")) Speed = "0.0";
-             if(Course.equals("NaN")) Course = "0.0";
+              if("NaN".equalsIgnoreCase(Altitude)) Altitude = "0.0";
+              if("NaN".equalsIgnoreCase(Speed)) Speed = "0.0";
+              if("NaN".equalsIgnoreCase(Course)) Course = "0.0";
 
               Statement comm = conn.createStatement();
 
-              String sql = "INSERT INTO ITSM_History (" +
+              String sql = "INSERT INTO ZZZ_BLACKBERRY (" +
                               "LocID," +
                               "Longitude," +
                               "Latitude," +
                               "Altitude," +
                               "Speed," +
                               "Course," +
+                              "TrueTime," +
+                              "EventID," +
                               "Location," +
-                              "MMC," +
-                              "MNC," +
-                              "LAC," +
-                              "CID," +
-                              "GpsStatus,"+
-                              "MobileTime,"+
-                              "TrueTime"+
+                              "IPAddress," +
+                              "IPPort" +
                           ") " +
                           "VALUES (" +
                               "'" + LocID + "'," +
-                              "'" + Longitude + "'," +
-                              "'" + Latitude + "'," +
-                              "'" + Altitude + "'," +
-                              "'" + Speed + "'," +
-                              "'" + Course + "'," +
+                              Longitude + "," +
+                              Latitude + "," +
+                              Altitude + "," +
+                              Speed + "," +
+                              Course + "," +
+                              "'" + TrueTime + "'," +
+                              "'" + EventID + "'," +
                               "'" + Location + "'," +
-                              "'" + MCC + "'," +
-                              "'" + MNC + "'," +
-                              "'" + LAC + "'," +
-                              "'" + CID + "'," +
-                              "'" + GpsStatus + "'," +
-                              "'" + MobileTime + "'," +
-                              "'" + TrueTime + "'" +
-//                              "'" + IPAddress + "'," +
-//                              IPPort +
+                              "'" + IPAddress + "'," +
+                              IPPort +
                           ")";
 
               comm.execute(sql);
@@ -205,12 +192,12 @@ public class BlackBerryListener extends Thread{
               windowServer.model.setValueAt(Speed, 4, 1);
               windowServer.model.setValueAt("Course", 5, 0);
               windowServer.model.setValueAt(Course, 5, 1);
-              windowServer.model.setValueAt("Location", 6, 0);
-              windowServer.model.setValueAt(Location, 6, 1);
-              windowServer.model.setValueAt("MCC", 7, 0);
-              windowServer.model.setValueAt(MCC, 7, 1);
-              windowServer.model.setValueAt("MNC", 8, 0);
-              windowServer.model.setValueAt(MNC, 8, 1);
+              windowServer.model.setValueAt("TrueTime", 6, 0);
+              windowServer.model.setValueAt(TrueTime, 6, 1);
+              windowServer.model.setValueAt("EventID", 7, 0);
+              windowServer.model.setValueAt(EventID, 7, 1);
+              windowServer.model.setValueAt("Location", 8, 0);
+              windowServer.model.setValueAt(Location, 8, 1);
               windowServer.model.setValueAt("IPAddress", 9, 0);
               windowServer.model.setValueAt(IPAddress, 9, 1);
               windowServer.model.setValueAt("IPPort", 10, 0);
@@ -222,24 +209,16 @@ public class BlackBerryListener extends Thread{
 
           }catch(SQLException e){
               windowServer.txtErrors.append(e.getMessage() + "\n");
-              if(conn.isClosed() || conn==null){
-                  conn = sqlServer2005Connection();
-                  saveDataIntoDB(data);
-              }else{
-                  conn.close();
-                  conn = sqlServer2005Connection();
-                  saveDataIntoDB(data);
-              }
+              
           }catch(Exception e){
               windowServer.txtErrors.append(e.getMessage() + "\n");
           }
-
+          
         }
 
         private String getAddressXY(String x, String y) {
             try{
-                StringBuffer text = new StringBuffer();
-                String result = "";
+                StringBuilder text = new StringBuilder();              
 
                 String url = properties.getProperty("geocoderUrl");
                 String param1 = properties.getProperty("geocoderUrlParam1");
@@ -258,15 +237,10 @@ public class BlackBerryListener extends Thread{
                     line = buff.readLine();
                 }
 
-                result = text.toString();
-
-                text = null;
-                buff.close();
-                buff = null;
+                String result = text.toString();                
+                buff.close();              
                 in.close();
-                in = null;
-                page = null;
-
+               
                 return result;
 
             }catch(MalformedURLException e) {
@@ -275,7 +249,6 @@ public class BlackBerryListener extends Thread{
             }catch(Exception e) {
                 windowServer.txtErrors.append(e.getMessage() + "\n");
                 return "";
-
             }
         }
     }
@@ -283,8 +256,8 @@ public class BlackBerryListener extends Thread{
     private String[] getLastCoords(String LocID){
         try{
             String[] result = {"0.0","0.0"};
-            Statement comm = conn.createStatement();
-            ResultSet data = comm.executeQuery("SELECT TOP 1 Longitude, Latitude " +
+            Statement stm = conn.createStatement();
+            ResultSet data = stm.executeQuery("SELECT TOP 1 Longitude, Latitude " +
                                                "FROM dbo.zzz_BlackBerry WHERE Longitude <> 0.0 " +
                                                "AND LocID = '" + LocID + "' ORDER BY ID DESC");
 
@@ -294,7 +267,7 @@ public class BlackBerryListener extends Thread{
             }
 
             data.close();
-            comm.close();
+            stm.close();
 
             return result;
         }catch(Exception e){
@@ -303,60 +276,18 @@ public class BlackBerryListener extends Thread{
         }
     }
 
-  private String DateTime(){
-
-      String returnValue = "";
-      date.setTime(new Date());
-
-      returnValue = date.get(Calendar.YEAR) + "/" +
-      (date.get(Calendar.MONTH) + 1) + "/" +
-      date.get(Calendar.DAY_OF_MONTH) + " " +
-      date.get(Calendar.HOUR_OF_DAY) + ":" +
-      date.get(Calendar.MINUTE) + ":" +
-      date.get(Calendar.SECOND) + "";
-
-      return returnValue;
-}
-
-private Connection sqlConnection(){
-        try{
-            
-            DriverLoad();
-            String strconn = "jdbc:mysql://svrba07/ITServiziMobile";
-            String user = "ServiziMobile";
-            String pwd = "ServiziMobile";
-            Connection c = DriverManager.getConnection(strconn, user, pwd);
-            return c;
-
-        }catch(Exception ex){
-            return null;
-        }
-    }
-
-static public boolean DriverLoad() {
-
-    try {
-
-      Class.forName("com.mysql.jdbc.Driver");
-      return true;
-    } catch (ClassNotFoundException e) {
-      return false;
-    }
-
-  }
     private Connection sqlServer2005Connection(){
       try{
-        Connection con = null;
+        
 
         SQLServerDataSource ds = new SQLServerDataSource();
         ds.setUser(properties.getProperty("dbUser"));
         ds.setPassword(properties.getProperty("dbPassword"));
         ds.setServerName(properties.getProperty("dbServerName"));
-        //ds.setPortNumber(Integer.parseInt(properties.getProperty("dbPortNumber")));
-        ds.setDatabaseName(properties.getProperty("dbDatabaseName"));
-        con = ds.getConnection();
+        ds.setPortNumber(Integer.parseInt(properties.getProperty("dbPortNumber")));
+        ds.setDatabaseName(properties.getProperty("dbDatabaseName"));        
 
-        return con;
+        return ds.getConnection();
 
       }catch(Exception e){windowServer.txtErrors.append(e.getMessage() + "\n"); return null;}
     }
